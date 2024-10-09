@@ -1,0 +1,42 @@
+{
+  "name": "ohdsi-update-csv",
+  "image": "harbor2.vantage6.ai/blueberry/ohdsi-update-csv",
+  "vantage6_version": "4.6",
+  "code_url": "https://github.com/Franky-Codes-BV/v6-euracan-sarcoma-algorithms",
+  "documentation_url": "",
+  "description": "Update the CSV file with the data from the OMOP CDM database",
+  "partitioning": "horizontal",
+  "functions": [
+    {
+      "name": "partial",
+      "description": "",
+      "type": "federated",
+      "databases": [
+        {
+          "name": "OMOP CDM Database",
+          "description": "Database to use retrieve the data from"
+        }
+      ],
+      "arguments": [
+        {
+          "name": "database_label",
+          "type": "string",
+          "description": "Label of dataset to overwrite"
+        },
+        {
+          "name": "cohort_id",
+          "type": "string",
+          "description": "The cohort ID from which the data should be set"
+        },
+        {
+          "name": "cohort_task_id",
+          "type": "integer",
+          "description": "Task ID in which the cohorts where created"
+        }
+      ],
+      "ui_visualizations": [
+      ]
+
+    }
+  ]
+}

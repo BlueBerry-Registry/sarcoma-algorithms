@@ -24,6 +24,7 @@ setup(
     install_requires=[
         "vantage6-algorithm-tools",
         "pandas",
+        "pyarrow",
         "rpy2",
         "numpy==1.26.4",
         "ohdsi-common",

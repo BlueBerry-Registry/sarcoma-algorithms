@@ -27,17 +27,17 @@ from ohdsi import database_connector
 
 def del_cohorts(cohort_names: list[str]):
     for cohort_name in cohort_names:
-        Path(f"/mnt/data/{cohort_name}.csv").unlink()
+        Path(f"/mnt/data/{cohort_name}.parquet").unlink()
     return {"msg": f"Cohort(s) {', '.join(cohort_names)} deleted"}
 
 
 def get_cohorts():
-    files = Path("/mnt/data").glob("cohort_*.csv")
+    files = Path("/mnt/data").glob("cohort_*.parquet")
     # get the filenames, dates and number of records
 
     metadata = []
     for file_ in files:
-        df = pd.read_csv(file_)
+        df = pd.read_parquet(file_)
         metadata.append(
             {
                 "name": file_.name.split(".")[0],
@@ -122,11 +122,12 @@ def create_cohort(
             error(f"Failed to create cohort dataframe: {cohort_name}, continuing")
             continue
 
-        with open(f"/mnt/data/cohort_{cohort_name}.csv", "w") as f:
-            df.to_csv(f, index=False)
+        with open(f"/mnt/data/cohort_{cohort_name}.parquet", "w") as f:
+            df.to_parquet(f)
+            # df.to_csv(f, index=False)
 
         # TODO change this to a parquet file
-        info(f"Saved cohort data to /mnt/data/cohort_{cohort_name}.csv")
+        info(f"Saved cohort data to /mnt/data/cohort_{cohort_name}.parquet")
 
     # TODO clean up the results schema as we do not need it anymore
     info("Done!")

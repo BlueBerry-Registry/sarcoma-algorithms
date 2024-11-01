@@ -25,6 +25,7 @@ setup(
         "vantage6-algorithm-tools",
         "pandas",
         "pyarrow",
+        "parquet-tools",
         "rpy2",
         "numpy==1.26.4",
         "ohdsi-common",

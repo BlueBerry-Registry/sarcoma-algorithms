@@ -31,7 +31,8 @@ def del_cohorts(cohort_names: list[str]):
     return {"msg": f"Cohort(s) {', '.join(cohort_names)} deleted"}
 
 
-def get_cohorts():
+@metadata
+def get_cohorts(meta_run: RunMetaData):
     files = Path("/mnt/data").glob("cohort_*.parquet")
     # get the filenames, dates and number of records
 
@@ -46,6 +47,7 @@ def get_cohorts():
                 ).strftime("%Y-%m-%d %H:%M:%S"),
                 "observations": df.shape[0],
                 "variables": list(df.columns),
+                "organization": meta_run.organization_id,
             }
         )
 
@@ -122,9 +124,16 @@ def create_cohort(
             error(f"Failed to create cohort dataframe: {cohort_name}, continuing")
             continue
 
-        with open(f"/mnt/data/cohort_{cohort_name}.parquet", "w") as f:
-            df.to_parquet(f)
-            # df.to_csv(f, index=False)
+        try:
+            df.to_parquet(f"/mnt/data/cohort_{cohort_name}.parquet")
+        except Exception as e:
+            error(
+                f"Failed to save cohort data to /mnt/data/cohort_{cohort_name}.parquet"
+            )
+            traceback.print_exc()
+            return {
+                "error": f"Failed to save cohort data to /mnt/data/cohort_{cohort_name}.parquet"
+            }
 
         # TODO change this to a parquet file
         info(f"Saved cohort data to /mnt/data/cohort_{cohort_name}.parquet")

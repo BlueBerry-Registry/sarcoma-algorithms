@@ -122,6 +122,8 @@ def create_cohort(
             )
         except Exception as e:
             error(f"Failed to create cohort dataframe: {cohort_name}, continuing")
+            traceback.print_exc()
+            # TODO we need to create a special container error for this
             continue
 
         try:
@@ -183,7 +185,9 @@ def __create_cohort_dataframe(
     """
     # Obtain SQL file for standard features
     sql_path = pkg_resources.resource_filename(
-        "v6-ohdsi-update-csv", "sql/standard_features.sql"
+        # "v6-ohdsi-update-csv", "sql/standard_features.sql"
+        "v6-ohdsi-update-csv",
+        "sql/sarcoma_features.sql",
     )
 
     # SQL READ
@@ -200,12 +204,17 @@ def __create_cohort_dataframe(
 
     # NACHARS
     info("Post-processing the data")
-    df["OBSERVATION_VAS"] = df["OBSERVATION_VAS"].apply(
-        lambda val: np.nan if isinstance(val, NACharacterType) else val
-    )
+
+    info(df.columns)
+    # df["OBSERVATION_VAS"] = df["OBSERVATION_VAS"].apply(
+    #     lambda val: np.nan if isinstance(val, NACharacterType) else val
+    # )
+
+    # Assuming df is your DataFrame and NACharacterType is defined somewhere in your code
+    df = df.applymap(lambda val: np.nan if isinstance(val, NACharacterType) else val)
 
     # DROP DUPLICATES
-    sub_df = df.drop_duplicates("SUBJECT_ID", keep="first")
+    sub_df = df.drop_duplicates("PATIENT_ID", keep="first")
     info(f"Dropped {len(df) - len(sub_df)} rows")
 
     return sub_df
@@ -223,8 +232,10 @@ def _query_database(
     info("Rendering the SQL")
     sql = sqlrender.render(
         sql,
-        cohort_table=f"{meta_omop.results_schema}.{cohort_table}",
+        cohort_table=f"{cohort_table}",
         cohort_id=cohort_id,
+        results_schema=meta_omop.results_schema,
+        cdm_schema=meta_omop.cdm_schema,
         cdm_database_schema=meta_omop.cdm_schema,
         incl_condition_concept_id=["NULL"],
         incl_procedure_concept_id=["NULL"],  # 4066543

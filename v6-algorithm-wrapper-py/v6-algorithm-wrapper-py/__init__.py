@@ -45,6 +45,9 @@ _summary = import_module("v6-summary-py")
 _summary.utils.DEFAULT_MINIMUM_ROWS = 0
 _summary.utils.DEFAULT_PRIVACY_THRESHOLD = 0
 
+_summary.partial_summary.DEFAULT_MINIMUM_ROWS = 0
+_summary.partial_summary.DEFAULT_PRIVACY_THRESHOLD = 0
+
 
 @algorithm_client
 def summary(
@@ -122,6 +125,10 @@ def summary(
             all_cohort_results[cohort_name]["numeric"][column]["mean"]
             for column in numerical_columns
         ]
+
+    info("debugger")
+    info(numerical_columns)
+    info(len(means))
 
     task = client.task.create(
         input_={
@@ -249,7 +256,10 @@ def _add_sd_to_results(
         sum_variance = 0
         for node_results in variance_results:
             sum_variance += node_results[column]
-        variance = sum_variance / (results["numeric"][column]["count"] - 1)
+        if results["numeric"][column]["count"] > 1:
+            variance = sum_variance / (results["numeric"][column]["count"] - 1)
+        else:
+            variance = 0  # TODO THIS IS TERRIBLE
         results["numeric"][column]["std"] = variance**0.5
     return results
 

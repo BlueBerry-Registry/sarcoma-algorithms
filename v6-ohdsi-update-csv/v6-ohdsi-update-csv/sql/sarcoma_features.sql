@@ -280,31 +280,30 @@ SELECT
     person.person_id as Patient_ID,
     person.age as Age,
     CASE
-	    WHEN person.age < 18 THEN '<18'
-	    WHEN person.age >= 18 and person.age < 60 THEN '18-59'
-	    WHEN person.age >= 60 THEN '>59'
-    END as Age_Group, -- change with the actual age groups
+        WHEN person.age < 18 THEN '<18'
+        WHEN person.age >= 18 and person.age < 60 THEN '18-59'
+        WHEN person.age >= 60 THEN '>59'
+    END as Age_Group,
     person.sex as Sex,
-    death.censor as Censor,
+    CAST(death.censor AS BOOLEAN) as Censor,
     death.status as SAVEPOINT,
     death.survival_days as Survival_days,
     primary_tumor.diagnosis as Primary_diagnosis,
-    IIF(surgery.surgery_concept IS NOT NULL, 1, 0) AS surgery_yn,
+    CAST(IIF(surgery.surgery_concept IS NOT NULL, 1, 0) AS BOOLEAN) AS surgery_yn,
     surgery.surgery as Surgery,
-    IIF(tumor_rupture.measurement_concept_id IS NOT NULL, 1, 0) AS tumor_rupture,
+    CAST(IIF(tumor_rupture.measurement_concept_id IS NOT NULL, 1, 0) AS BOOLEAN) AS tumor_rupture,
     resection.resection as resection,
     resection.completeness_of_resection as Completeness_of_resection,
-    IIF(recurrence.n_recurrence IS NOT NULL, 1, 0) as local_recurrence,
+    CAST(IIF(recurrence.n_recurrence IS NOT NULL, 1, 0) AS BOOLEAN) as local_recurrence,
     recurrence.n_recurrence as n_recurrence,
-    IIF(metastasis.n_metastasis IS NOT NULL, 1, 0) as distant_metastasis,
-
+    CAST(IIF(metastasis.n_metastasis IS NOT NULL, 1, 0) AS BOOLEAN) as distant_metastasis,
     focality.focality as Multifocality,
     tumor_size.tumor_size as Tumor_size_cm
 FROM
     person
 LEFT JOIN
-	primary_tumor
-	ON person.person_id = primary_tumor.person_id
+    primary_tumor
+    ON person.person_id = primary_tumor.person_id
 LEFT JOIN
     death
     ON person.person_id = death.person_id

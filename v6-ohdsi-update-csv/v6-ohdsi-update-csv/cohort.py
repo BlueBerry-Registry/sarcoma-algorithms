@@ -31,7 +31,8 @@ def del_cohorts(cohort_names: list[str]):
     return {"msg": f"Cohort(s) {', '.join(cohort_names)} deleted"}
 
 
-def get_cohorts():
+@metadata
+def get_cohorts(meta_run: RunMetaData):
     files = Path("/mnt/data").glob("cohort_*.parquet")
     # get the filenames, dates and number of records
 
@@ -46,6 +47,12 @@ def get_cohorts():
                 ).strftime("%Y-%m-%d %H:%M:%S"),
                 "observations": df.shape[0],
                 "variables": list(df.columns),
+                "types": [
+                    {"name": name, "dtype": str(type_)}
+                    for name, type_ in df.dtypes.to_dict().items()
+                ],
+                # "unique_types": column_types,
+                "organization": meta_run.organization_id,
             }
         )
 
@@ -118,13 +125,23 @@ def create_cohort(
             df = __create_cohort_dataframe(
                 connection, meta_omop, cohort_table, cohort_id
             )
+
         except Exception as e:
             error(f"Failed to create cohort dataframe: {cohort_name}, continuing")
+            traceback.print_exc()
+            # TODO we need to create a special container error for this
             continue
 
-        with open(f"/mnt/data/cohort_{cohort_name}.parquet", "w") as f:
-            df.to_parquet(f)
-            # df.to_csv(f, index=False)
+        try:
+            df.to_parquet(f"/mnt/data/cohort_{cohort_name}.parquet")
+        except Exception as e:
+            error(
+                f"Failed to save cohort data to /mnt/data/cohort_{cohort_name}.parquet"
+            )
+            traceback.print_exc()
+            return {
+                "error": f"Failed to save cohort data to /mnt/data/cohort_{cohort_name}.parquet"
+            }
 
         # TODO change this to a parquet file
         info(f"Saved cohort data to /mnt/data/cohort_{cohort_name}.parquet")
@@ -174,7 +191,9 @@ def __create_cohort_dataframe(
     """
     # Obtain SQL file for standard features
     sql_path = pkg_resources.resource_filename(
-        "v6-ohdsi-update-csv", "sql/standard_features.sql"
+        # "v6-ohdsi-update-csv", "sql/standard_features.sql"
+        "v6-ohdsi-update-csv",
+        "sql/sarcoma_features.sql",
     )
 
     # SQL READ
@@ -191,13 +210,23 @@ def __create_cohort_dataframe(
 
     # NACHARS
     info("Post-processing the data")
-    df["OBSERVATION_VAS"] = df["OBSERVATION_VAS"].apply(
-        lambda val: np.nan if isinstance(val, NACharacterType) else val
-    )
+
+    info(df.columns)
+    # df["OBSERVATION_VAS"] = df["OBSERVATION_VAS"].apply(
+    #     lambda val: np.nan if isinstance(val, NACharacterType) else val
+    # )
+
+    # Assuming df is your DataFrame and NACharacterType is defined somewhere in your code
+    df = df.applymap(lambda val: np.nan if isinstance(val, NACharacterType) else val)
 
     # DROP DUPLICATES
-    sub_df = df.drop_duplicates("SUBJECT_ID", keep="first")
+    sub_df = df.drop_duplicates("PATIENT_ID", keep="first")
     info(f"Dropped {len(df) - len(sub_df)} rows")
+
+    # Convert to category when type is object
+    info("Converting object columns to category")
+    for col in sub_df.select_dtypes(include=["object"]).columns:
+        sub_df[col] = sub_df[col].astype("category")
 
     return sub_df
 
@@ -214,8 +243,11 @@ def _query_database(
     info("Rendering the SQL")
     sql = sqlrender.render(
         sql,
-        cohort_table=f"{meta_omop.results_schema}.{cohort_table}",
+        cohort_table=f"{cohort_table}",
         cohort_id=cohort_id,
+        results_schema=meta_omop.results_schema,
+        cdm_schema=meta_omop.cdm_schema,
+        vocabulary_schema=meta_omop.cdm_schema,
         cdm_database_schema=meta_omop.cdm_schema,
         incl_condition_concept_id=["NULL"],
         incl_procedure_concept_id=["NULL"],  # 4066543

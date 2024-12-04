@@ -162,10 +162,10 @@ WITH
         FROM
             all_fnclcc
         WHERE rank = 1
-    )
+    ),
 
-    --- get all tumor size measurements sorted by date, newest first
-    tumor_rupture AS (
+    -- get all tumor size measurements sorted by date, newest first
+    tumor_rupture_all AS (
         SELECT
             cohort.subject_id as person_id,
             measurement.measurement_concept_id,
@@ -177,28 +177,28 @@ WITH
         LEFT JOIN
             omopcdm_synthetic.measurement measurement
             ON cohort.subject_id = measurement.person_id
-        WHERE measurement.measurement_concept_id = 36768904 --- Tumor rupture
+        WHERE measurement.measurement_concept_id = 36768904
     ),
     --- select only one tumor measurement per patient
-    tumor AS (
+    tumor_rupture AS (
         SELECT
             person_id,
             size
         FROM
-            all_tumor_size
+            tumor_rupture_all
         WHERE rank = 1
-    ),
+    )
 
 
 SELECT
     person.person_id as Patient_ID,
     person.age as Age,
     person.sex as Sex,
-    death.censor as Censor,
+    CAST(death.censor AS BIT) as Censor,
     death.status as SAVEPOINT,
     death.survival_days as Survival_days,
     CASE WHEN surgery.procedure_concept_id IS NOT NULL THEN 1 ELSE 0 END AS surgery,
-    sur
+    surgery,
     tumor.size as Tumor_size,
     fnclcc.grade as FNCLCC_grade
 FROM

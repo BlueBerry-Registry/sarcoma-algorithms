@@ -47,6 +47,11 @@ def get_cohorts(meta_run: RunMetaData):
                 ).strftime("%Y-%m-%d %H:%M:%S"),
                 "observations": df.shape[0],
                 "variables": list(df.columns),
+                "types": [
+                    {"name": name, "dtype": str(type_)}
+                    for name, type_ in df.dtypes.to_dict().items()
+                ],
+                # "unique_types": column_types,
                 "organization": meta_run.organization_id,
             }
         )
@@ -120,6 +125,7 @@ def create_cohort(
             df = __create_cohort_dataframe(
                 connection, meta_omop, cohort_table, cohort_id
             )
+
         except Exception as e:
             error(f"Failed to create cohort dataframe: {cohort_name}, continuing")
             traceback.print_exc()
@@ -217,6 +223,11 @@ def __create_cohort_dataframe(
     sub_df = df.drop_duplicates("PATIENT_ID", keep="first")
     info(f"Dropped {len(df) - len(sub_df)} rows")
 
+    # Convert to category when type is object
+    info("Converting object columns to category")
+    for col in sub_df.select_dtypes(include=["object"]).columns:
+        sub_df[col] = sub_df[col].astype("category")
+
     return sub_df
 
 
@@ -236,6 +247,7 @@ def _query_database(
         cohort_id=cohort_id,
         results_schema=meta_omop.results_schema,
         cdm_schema=meta_omop.cdm_schema,
+        vocabulary_schema=meta_omop.cdm_schema,
         cdm_database_schema=meta_omop.cdm_schema,
         incl_condition_concept_id=["NULL"],
         incl_procedure_concept_id=["NULL"],  # 4066543

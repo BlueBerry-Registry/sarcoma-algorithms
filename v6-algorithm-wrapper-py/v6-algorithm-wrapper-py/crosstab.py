@@ -19,7 +19,7 @@ from vantage6.algorithm.client import AlgorithmClient
 from .decorator import new_data_decorator
 
 
-@new_data_decorator(1)
+@new_data_decorator
 def partial_crosstab(
     dfs: list[pd.DataFrame],
     cohort_names: list[str],
@@ -33,39 +33,15 @@ def partial_crosstab(
     return results
 
 
-# def central_crosstab
-
-
-#
-# Original code
-#
-
-
-# The following global variables are algorithm settings. They can be overwritten by
-# the node admin by setting the corresponding environment variables.
-
-# Minimum value to be given as individual value in the contingency table. To be
-# overwritten by setting the "CROSSTAB_PRIVACY_THRESHOLD" environment variable.
-DEFAULT_PRIVACY_THRESHOLD = "5"
-
-# Minimum number of rows in the node's dataset. To be overwritten by setting the
-# "CROSSTAB_MINIMUM_ROWS_TOTAL" environment variable.
-DEFAULT_MINIMUM_ROWS_TOTAL = "5"
-
-# Whether or not to allow value of 0 in the contingency table. To be overwritten by
-# setting the "CROSSTAB_ALLOW_ZERO" environment variable.
-DEFAULT_ALLOW_ZERO = "false"
-
-
 @algorithm_client
-def central_crosstab(
+def crosstab(
     client: AlgorithmClient,
     results_col: str,
     group_cols: list[str],
     organizations_to_include: list[int] = None,
     include_chi2: bool = True,
     include_totals: bool = True,
-) -> Any:
+):
     """
     Central part of the algorithm
 
@@ -117,8 +93,101 @@ def central_crosstab(
     results = client.wait_for_results(task_id=task.get("id"))
     info("Results obtained!")
 
+    all_cohort_results = {}
+    cohort_names = results[0].keys()
+    for cohort_name in cohort_names:
+        cohort_results = [result[cohort_name] for result in results]
+        all_cohort_results[cohort_name] = _aggregate_results(
+            cohort_results, group_cols, include_chi2, include_totals
+        )
+
     # return the final results of the algorithm
-    return _aggregate_results(results, group_cols, include_chi2, include_totals)
+    return all_cohort_results
+
+
+#
+# Original code
+#
+
+
+# The following global variables are algorithm settings. They can be overwritten by
+# the node admin by setting the corresponding environment variables.
+
+# Minimum value to be given as individual value in the contingency table. To be
+# overwritten by setting the "CROSSTAB_PRIVACY_THRESHOLD" environment variable.
+DEFAULT_PRIVACY_THRESHOLD = "5"
+
+# Minimum number of rows in the node's dataset. To be overwritten by setting the
+# "CROSSTAB_MINIMUM_ROWS_TOTAL" environment variable.
+DEFAULT_MINIMUM_ROWS_TOTAL = "5"
+
+# Whether or not to allow value of 0 in the contingency table. To be overwritten by
+# setting the "CROSSTAB_ALLOW_ZERO" environment variable.
+DEFAULT_ALLOW_ZERO = "false"
+
+
+# @algorithm_client
+# def central_crosstab(
+#     client: AlgorithmClient,
+#     results_col: str,
+#     group_cols: list[str],
+#     organizations_to_include: list[int] = None,
+#     include_chi2: bool = True,
+#     include_totals: bool = True,
+# ) -> Any:
+#     """
+#     Central part of the algorithm
+
+#     Parameters
+#     ----------
+#     client : AlgorithmClient
+#         The client object used for communication with the server.
+#     results_col : str
+#         The column for which counts are calculated
+#     group_cols : list[str]
+#         List of one or more columns to group the data by.
+#     organizations_to_include : list[int], optional
+#         List of organization ids to include in the computation. If not provided, all
+#         organizations in the collaboration are included.
+#     include_chi2 : bool, optional
+#         Whether to include the chi-squared statistic in the results.
+#     include_totals : bool, optional
+#         Whether to include totals in the contingency table.
+#     """
+#     # get all organizations (ids) within the collaboration so you can send a
+#     # task to them.
+#     if not organizations_to_include:
+#         organizations = client.organization.list()
+#         organizations_to_include = [
+#             organization.get("id") for organization in organizations
+#         ]
+
+#     # Define input parameters for a subtask
+#     info("Defining input parameters")
+#     input_ = {
+#         "method": "partial_crosstab",
+#         "kwargs": {
+#             "results_col": results_col,
+#             "group_cols": group_cols,
+#         },
+#     }
+
+#     # create a subtask for all organizations in the collaboration.
+#     info("Creating subtask to compute partial contingency tables")
+#     task = client.task.create(
+#         input_=input_,
+#         organizations=organizations_to_include,
+#         name="Partial crosstabulation",
+#         description="Contingency table for each organization",
+#     )
+
+#     # wait for node to return results of the subtask.
+#     info("Waiting for results")
+#     results = client.wait_for_results(task_id=task.get("id"))
+#     info("Results obtained!")
+
+#     # return the final results of the algorithm
+#     return _aggregate_results(results, group_cols, include_chi2, include_totals)
 
 
 def _aggregate_results(
@@ -403,6 +472,10 @@ def _partial_crosstab(
     _do_prestart_privacy_checks(
         df, group_cols + [results_col], PRIVACY_THRESHOLD, ALLOW_ZERO
     )
+
+    # TODO this is a fix for categorical columns with empty values.
+    for col in df.select_dtypes(include=["category"]).columns:
+        df[col] = df[col].cat.add_categories("N/A")
 
     # Fill empty (categorical) values with "N/A"
     df = df.fillna("N/A")

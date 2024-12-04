@@ -24,6 +24,7 @@ setup(
     install_requires=[
         "vantage6-algorithm-tools",
         "pandas",
+        "scipy",
         "v6-summary-py @ git+https://github.com/vantage6/v6-summary-py.git@main",
         "pyarrow",
     ],

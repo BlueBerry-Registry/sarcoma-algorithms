@@ -115,15 +115,15 @@ def crosstab(
 
 # Minimum value to be given as individual value in the contingency table. To be
 # overwritten by setting the "CROSSTAB_PRIVACY_THRESHOLD" environment variable.
-DEFAULT_PRIVACY_THRESHOLD = "5"
+DEFAULT_PRIVACY_THRESHOLD = "0"
 
 # Minimum number of rows in the node's dataset. To be overwritten by setting the
 # "CROSSTAB_MINIMUM_ROWS_TOTAL" environment variable.
-DEFAULT_MINIMUM_ROWS_TOTAL = "5"
+DEFAULT_MINIMUM_ROWS_TOTAL = "3"
 
 # Whether or not to allow value of 0 in the contingency table. To be overwritten by
 # setting the "CROSSTAB_ALLOW_ZERO" environment variable.
-DEFAULT_ALLOW_ZERO = "false"
+DEFAULT_ALLOW_ZERO = "true"
 
 
 # @algorithm_client
@@ -339,6 +339,8 @@ def compute_chi_squared(
     min_df = min_df.loc[(min_df != 0).any(axis=1)]
     min_df = min_df.loc[:, (min_df != 0).any(axis=0)]
     max_df = contingency_table[max_colnames]
+    max_df = min_df.loc[(max_df != 0).any(axis=1)]
+    max_df = min_df.loc[:, (max_df != 0).any(axis=0)]
 
     chi2_min = scipy.stats.chi2_contingency(min_df)
     chi2_max = scipy.stats.chi2_contingency(max_df)

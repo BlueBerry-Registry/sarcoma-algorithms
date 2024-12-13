@@ -1,4 +1,5 @@
-vantage6-algorithm-tools
+vantage6-algorithm-tools==4.7.1
 pandas
 pyarrow
 git+https://github.com/vantage6/v6-summary-py.git
+git+https://github.com/vantage6/v6-kaplan-meier-py.git

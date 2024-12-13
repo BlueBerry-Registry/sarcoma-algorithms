@@ -22,7 +22,7 @@ setup(
     packages=find_packages(),
     python_requires=">=3.10",
     install_requires=[
-        "vantage6-algorithm-tools",
+        "vantage6-algorithm-tools==4.7.1",
         "pandas",
         "scipy",
         "v6-summary-py @ git+https://github.com/vantage6/v6-summary-py.git@main",

@@ -191,8 +191,7 @@ def __create_cohort_dataframe(
     """
     # Obtain SQL file for standard features
     sql_path = pkg_resources.resource_filename(
-        # "v6-ohdsi-update-csv", "sql/standard_features.sql"
-        "v6-ohdsi-update-csv",
+        "v6-sessions",
         "sql/sarcoma_features.sql",
     )
 

@@ -11,7 +11,7 @@ with open(path.join(here, "README.md"), encoding="utf-8") as f:
 # Here you specify the meta-data of your package. The `name` argument is
 # needed in some other steps.
 setup(
-    name="ohdsi-update-csv",
+    name="v6-sessions",
     version="1.0.0",
     description="This will extract a dataset from a cohort in the OMOP database and overwrites the CSV attached to the vantage6-node. The user can determine which database to overwrite.",
     long_description=long_description,
@@ -32,5 +32,5 @@ setup(
         "ohdsi-database-connector",
         "ohdsi-sqlrender",
     ],
-    package_data={"v6-ohdsi-update-csv": ["sql/*.sql"]},
+    package_data={"v6-sessions": ["sql/*.sql"]},
 )

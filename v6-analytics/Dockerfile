@@ -1,10 +1,12 @@
 # basic python3 image as base
-# FROM harbor2.vantage6.ai/infrastructure/algorithm-base
-FROM harbor2.vantage6.ai/infrastructure/algorithm-ohdsi-base
+FROM harbor2.vantage6.ai/infrastructure/algorithm-base:4.7
 
 # This is a placeholder that should be overloaded by invoking
 # docker build with '--build-arg PKG_NAME=...'
-ARG PKG_NAME="v6-ohdsi-update-csv"
+ARG PKG_NAME="v6-analytics"
+
+RUN apt-get update
+RUN apt-get install -y git
 
 # install federated algorithm
 COPY . /app
@@ -17,4 +19,4 @@ ENV PKG_NAME=${PKG_NAME}
 
 # Tell docker to execute `wrap_algorithm()` when the image is run. This function
 # will ensure that the algorithm method is called properly.
-CMD python -c "from vantage6.algorithm.tools.wrap import wrap_algorithm; wrap_algorithm()"
+CMD ["python", "-c", "from vantage6.algorithm.tools.wrap import wrap_algorithm; wrap_algorithm()"]

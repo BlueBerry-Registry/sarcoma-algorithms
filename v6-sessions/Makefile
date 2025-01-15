@@ -5,7 +5,7 @@ REGISTRY_PROJECT ?= blueberry
 PLATFORMS ?= linux/amd64
 TAG ?= latest
 BASE ?= 4.5
-IMAGE ?= summary
+IMAGE ?= sessions
 
 # We use a conditional (true on any non-empty string) later. To avoid
 # accidents, we don't use user-controlled PUSH_REG directly.

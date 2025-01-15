@@ -228,9 +228,11 @@ def _aggregate_results(
     # contain ranges (e.g. "0-5"). These are converted to two columns: one for the
     # minimum value and one for the maximum value.
     converted_results = []
+    all_orig_columns = set()
     for partial_df in partial_dfs:
         # expand the ranges to min and max values
         orig_columns = partial_df.columns
+        all_orig_columns.update(orig_columns)
         for col in orig_columns:
             if partial_df[col].dtype == "object":
                 # if the column contains a range, split it into two columns
@@ -249,6 +251,8 @@ def _aggregate_results(
         # convert to numeric
         partial_df = partial_df.apply(pd.to_numeric).astype(int)
         converted_results.append(partial_df)
+
+    orig_columns = list(all_orig_columns)
 
     # We now have a list of partial results that contain minimum and maximum values
     # for each cell in the contingency table. We can now add them together to get the
@@ -477,7 +481,8 @@ def _partial_crosstab(
 
     # TODO this is a fix for categorical columns with empty values.
     for col in df.select_dtypes(include=["category"]).columns:
-        df[col] = df[col].cat.add_categories("N/A")
+        if "N/A" not in df[col].cat.categories:
+            df[col] = df[col].cat.add_categories("N/A")
 
     # Fill empty (categorical) values with "N/A"
     df = df.fillna("N/A")

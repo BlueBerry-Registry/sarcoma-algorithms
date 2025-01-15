@@ -26,7 +26,7 @@ WITH
         SELECT
             cohort.subject_id as person_id,
             gender_concept.concept_name as sex,
-            EXTRACT(YEAR FROM pt.diagnosis_date) - person.year_of_birth as age
+            DATEPART(YEAR, pt.diagnosis_date) - person.year_of_birth as age
         FROM
             @results_schema.@cohort_table cohort
         LEFT JOIN
@@ -470,22 +470,23 @@ SELECT
         WHEN person.age > 60 and person.age <= 70 THEN '61-70'
         WHEN person.age > 70 and person.age <= 80 THEN '71-80'
 	    WHEN person.age > 80 THEN '>80'
+        ELSE 'N/A'
     END as Age_Group, -- change with the actual age groups
-    person.sex as Sex,
+    ISNULL(person.sex, 'N/A') as Sex,
     death.censor as Censor,
     death.status as patient_status,
     death.survival_days as Survival_days,
-    primary_tumor.diagnosis as Primary_diagnosis,
+    ISNULL(primary_tumor.diagnosis, 'N/A') as Primary_diagnosis,
     CAST(IIF(surgery.surgery_concept IS NOT NULL, 1, 0) AS BIT) AS surgery_yn,
-    surgery.surgery as Surgery,
+    ISNULL(surgery.surgery, 'N/A') as Surgery,
     CAST(IIF(tumor_rupture.measurement_concept_id IS NOT NULL, 1, 0) AS BIT) AS tumor_rupture,
-    resection.resection as resection,
-    resection.completeness_of_resection as Completeness_of_resection,
+    ISNULL(resection.resection, 'N/A') as resection,
+    ISNULL(resection.completeness_of_resection, 'N/A') as Completeness_of_resection,
     CAST(IIF(recurrence.recurrence_date IS NOT NULL, 1, 0) AS BIT) as local_recurrence,
     CAST(IIF(metastasis.n_metastasis IS NOT NULL, 1, 0) AS BIT) as distant_metastasis,
-    focality.focality as Multifocality,
+    ISNULL(focality.focality, 'N/A') as Multifocality,
     tumor_size.tumor_size as Tumor_size,
-    tumor_grade.grade as FNCLCC_grade,
+    ISNULL(tumor_grade.grade, 'N/A') as FNCLCC_grade,
     CAST(IIF(pre_chemo.pre_chemo_date IS NOT NULL, 1, 0) AS BIT) as Pre_operative_chemo,
     CAST(IIF(post_chemo.post_chemo_date IS NOT NULL, 1, 0) AS BIT) as Post_operative_chemo,
     CAST(IIF(pre_radio.pre_radio_date IS NOT NULL, 1, 0) AS BIT) as Pre_operative_radio,

@@ -5,3 +5,4 @@ from .kaplan_meier import (
     get_km_event_table,
     get_unique_event_times,
 )
+from .t_test import t_test_central, t_test_partial

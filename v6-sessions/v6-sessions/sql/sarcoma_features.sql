@@ -60,6 +60,23 @@ WITH
             ON cohort.subject_id = op.person_id
         {@cohort_id != -1} ? {WHERE cohort_definition_id = @cohort_id}
     ),
+    --- get survival from 1 to 10 years
+    survival AS (
+        SELECT
+            death.person_id,
+            CAST(IIF(death.survival_days >= 365, 1, 0) AS BIT) AS survival_1yr,
+            CAST(IIF(death.survival_days >= 2*365, 1, 0) AS BIT) AS survival_2yr,
+            CAST(IIF(death.survival_days >= 3*365, 1, 0) AS BIT) AS survival_3yr,
+            CAST(IIF(death.survival_days >= 4*365, 1, 0) AS BIT) AS survival_4yr,
+            CAST(IIF(death.survival_days >= 5*365, 1, 0) AS BIT) AS survival_5yr,
+            CAST(IIF(death.survival_days >= 6*365, 1, 0) AS BIT) AS survival_6yr,
+            CAST(IIF(death.survival_days >= 7*365, 1, 0) AS BIT) AS survival_7yr,
+            CAST(IIF(death.survival_days >= 8*365, 1, 0) AS BIT) AS survival_8yr,
+            CAST(IIF(death.survival_days >= 9*365, 1, 0) AS BIT) AS survival_9yr,
+            CAST(IIF(death.survival_days >= 10*365, 1, 0) AS BIT) AS survival_10yr
+        FROM 
+            death
+    ),
     --- get main surgery information
     surgery AS (
         SELECT
@@ -499,6 +516,9 @@ LEFT JOIN
 LEFT JOIN
     death
     ON person.person_id = death.person_id
+LEFT JOIN
+    survival
+    ON person.person_id = survival.person_id
 LEFT JOIN
     surgery
     ON person.person_id = surgery.person_id

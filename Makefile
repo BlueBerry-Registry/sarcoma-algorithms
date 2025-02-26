@@ -7,7 +7,7 @@ help:
 	@echo "  make analytics - build the analytics image"
 	@echo ""
 	@echo "Using "
-	@echo "  push: ${PUSH}"
+	@echo "  PUSH: ${PUSH} (true/false)"
 	@echo ""
 
 session:

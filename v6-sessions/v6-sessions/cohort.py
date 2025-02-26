@@ -39,6 +39,16 @@ def get_cohorts(meta_run: RunMetaData):
     metadata = []
     for file_ in files:
         df = pd.read_parquet(file_)
+
+        def get_column_metadata(df, name, type_):
+            metadata = {
+                "name": name,
+                "dtype": str(type_),
+            }
+            if pd.api.types.is_categorical_dtype(df[name]):
+                metadata["levels"] = df[name].unique().tolist()
+            return metadata
+
         metadata.append(
             {
                 "name": file_.name.split(".")[0],
@@ -48,10 +58,9 @@ def get_cohorts(meta_run: RunMetaData):
                 "observations": df.shape[0],
                 "variables": list(df.columns),
                 "types": [
-                    {"name": name, "dtype": str(type_)}
+                    get_column_metadata(df, name, type_)
                     for name, type_ in df.dtypes.to_dict().items()
                 ],
-                # "unique_types": column_types,
                 "organization": meta_run.organization_id,
             }
         )

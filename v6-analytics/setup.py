@@ -22,7 +22,9 @@ setup(
     packages=find_packages(),
     python_requires=">=3.10",
     install_requires=[
-        "vantage6-algorithm-tools==4.7.1",
+        "vantage6-algorithm-tools==4.9.1",
+        "formulaic",
+        "statsmodels",
         "pandas",
         "scipy",
         "v6-summary-py @ git+https://github.com/vantage6/v6-summary-py.git@main",

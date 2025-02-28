@@ -20,8 +20,7 @@ from vantage6.algorithm.tools.exceptions import (
 )
 
 from vantage6.algorithm.tools.util import info, get_env_var
-from vantage6.algorithm.tools.decorators import data, algorithm_client
-from vantage6.algorithm.tools.exceptions import PrivacyThresholdViolation
+from vantage6.algorithm.tools.decorators import algorithm_client
 from vantage6.algorithm.tools.util import info, warn, get_env_var
 from vantage6.algorithm.client import AlgorithmClient
 
@@ -216,11 +215,16 @@ def glm(
             categorical_predictors,
         )
 
+    # Initialize tracking of converged cohorts
+    all_cohort_names = None  # Will be populated after first iteration
+    active_cohort_names = []  # Will track non-converged cohorts
+    converged_results = {}  # Will store results of converged cohorts
+
     # Iterate to find the coefficients
     iteration = 1
     betas = None
     while iteration <= max_iterations:
-        converged, new_betas, deviance = _do_iteration(
+        converged, new_betas, deviance, cohort_names = _do_iteration(
             iteration=iteration,
             client=client,
             formula=formula,
@@ -230,37 +234,78 @@ def glm(
             tolerance_level=tolerance_level,
             organizations_to_include=organizations_to_include,
             betas_old=betas,
+            use_cohort_names=active_cohort_names,
         )
+
+        # On first iteration, initialize cohort tracking
+        if iteration == 1:
+            all_cohort_names = cohort_names
+            active_cohort_names = cohort_names
+
+        # Update betas and track converged cohorts
         betas = new_betas["beta_estimates"]
 
-        # terminate if converged or reached max iterations
-        if converged:
-            info(" - Converged!")
+        # Check convergence for each cohort
+        for cohort in active_cohort_names[:]:  # Iterate over copy to allow removal
+            if deviance[cohort]["new"] == 0 or (
+                abs(deviance[cohort]["old"] - deviance[cohort]["new"])
+                / deviance[cohort]["new"]
+                < tolerance_level
+            ):
+                # Store results for converged cohort
+                converged_results[cohort] = _prepare_cohort_results(
+                    new_betas[cohort],
+                    deviance[cohort],
+                )
+                active_cohort_names.remove(cohort)
+
+        # terminate if all cohorts have converged or reached max iterations
+        if not active_cohort_names:
+            info(" - All cohorts converged!")
             break
         if iteration == max_iterations:
             warn(" - Maximum number of iterations reached!")
+            # Store results for non-converged cohorts
+            for cohort in active_cohort_names:
+                converged_results[cohort] = _prepare_cohort_results(
+                    new_betas[cohort],
+                    deviance[cohort],
+                    converged=False,
+                )
             break
         iteration += 1
 
-    # after the iteration, return the final results
-    info("Preparing final results")
-    betas = pd.Series(betas)
-    std_errors = pd.Series(new_betas["std_error_betas"])
-    zvalue = betas / std_errors
-    if new_betas["is_dispersion_estimated"]:
+    return {
+        "cohorts": converged_results,
+        "details": {
+            "iterations": iteration,
+            "all_converged": len(active_cohort_names) == 0,
+        },
+    }
+
+
+def _prepare_cohort_results(
+    betas: dict, deviance: dict, converged: bool = True
+) -> dict:
+    """Prepare the final results for a single cohort."""
+    betas_series = pd.Series(betas["beta_estimates"])
+    std_errors = pd.Series(betas["std_error_betas"])
+    zvalue = betas_series / std_errors
+
+    if betas["is_dispersion_estimated"]:
         pvalue = 2 * stats.t.cdf(
-            -np.abs(zvalue), new_betas["num_observations"] - new_betas["num_variables"]
+            -np.abs(zvalue), betas["num_observations"] - betas["num_variables"]
         )
     else:
         pvalue = 2 * stats.norm.cdf(-np.abs(zvalue))
 
     # add back indices to pvalue
-    pvalue = pd.Series(pvalue, index=betas.index)
+    pvalue = pd.Series(pvalue, index=betas_series.index)
 
     # create dataframe with results
     results = pd.DataFrame(
         {
-            "beta": betas,
+            "beta": betas_series,
             "std_error": std_errors,
             "z_value": zvalue,
             "p_value": pvalue,
@@ -271,13 +316,12 @@ def glm(
         "coefficients": results.to_dict(),
         "details": {
             "converged": converged,
-            "iterations": iteration,
-            "dispersion": new_betas["dispersion"],
-            "is_dispersion_estimated": new_betas["is_dispersion_estimated"],
+            "dispersion": betas["dispersion"],
+            "is_dispersion_estimated": betas["is_dispersion_estimated"],
             "deviance": deviance["new"],
             "null_deviance": deviance["null"],
-            "num_observations": new_betas["num_observations"],
-            "num_variables": new_betas["num_variables"],
+            "num_observations": betas["num_observations"],
+            "num_variables": betas["num_variables"],
         },
     }
 
@@ -291,38 +335,20 @@ def _do_iteration(
     survival_sensor_column: str,
     tolerance_level: int,
     organizations_to_include: list[int],
+    use_cohort_names: list[str],
     betas_old: dict | None = None,
-) -> tuple[bool, dict, dict]:
+) -> tuple[bool, dict, dict, list[str]]:
     """
-    Execute one iteration of the GLM algorithm
-
-    Parameters
-    ----------
-    iteration : int
-        The iteration number
-    client : AlgorithmClient
-        The client object to interact with the server
-    formula : str
-        The formula to use for the GLM
-    family : str
-        The family of the GLM
-    categorical_predictors : list[str]
-        The column names of the predictor variables to be treated as categorical
-    survival_sensor_column : str
-        The survival_sensor_column value
-    tolerance_level : int
-        The tolerance level for the convergence of the algorithm
-    organizations_to_include : list[int]
-        The organizations to include in the computation
-    betas_old : dict, optional
-        The beta coefficients from the previous iteration, by default None
+    Execute one iteration of the GLM algorithm for multiple cohorts
 
     Returns
     -------
-    tuple[bool, dict, dict]
-        A tuple containing a boolean indicating if the algorithm has converged, a
-        dictionary containing the new beta coefficients, and a dictionary containing
-        the deviance.
+    tuple[bool, dict, dict, list[str]]
+        A tuple containing:
+        - boolean indicating if all cohorts have converged
+        - dictionary containing the new beta coefficients per cohort
+        - dictionary containing the deviance per cohort
+        - list of all cohort names
     """
     # print iteration header to logs
     _log_header(iteration)
@@ -337,15 +363,22 @@ def _do_iteration(
         iter_num=iteration,
         organizations_to_include=organizations_to_include,
         betas=betas_old,
+        use_cohort_names=use_cohort_names,
     )
     info(" - Partial betas obtained!")
 
+    # Get all cohort names on first iteration
+    cohort_names = list(partial_betas[0].keys()) if iteration == 1 else use_cohort_names
+
     # compute central betas from the partial betas
     info("Computing central betas")
-    new_betas = _compute_central_betas(partial_betas, family)
+    new_betas = {}
+    for cohort in cohort_names:
+        cohort_partials = [result[cohort] for result in partial_betas]
+        new_betas[cohort] = _compute_central_betas(cohort_partials, family)
     info(" - Central betas obtained!")
 
-    # compute the deviance for each of the nodes
+    # compute the deviance for each cohort
     info("Computing deviance")
     deviance_partials = _compute_partial_deviance(
         client=client,
@@ -354,26 +387,24 @@ def _do_iteration(
         categorical_predictors=categorical_predictors,
         iter_num=iteration,
         survival_sensor_column=survival_sensor_column,
-        beta_estimates=new_betas["beta_estimates"],
+        beta_estimates={
+            cohort: betas["beta_estimates"] for cohort, betas in new_betas.items()
+        },
         beta_estimates_previous=betas_old,
-        global_average_outcome_var=new_betas["y_average"],
+        global_average_outcome_var={
+            cohort: betas["y_average"] for cohort, betas in new_betas.items()
+        },
         organizations_to_include=organizations_to_include,
+        use_cohort_names=use_cohort_names,
     )
 
-    total_deviance = _compute_deviance(deviance_partials)
+    deviance = {}
+    for cohort in cohort_names:
+        cohort_partials = [result[cohort] for result in deviance_partials]
+        deviance[cohort] = _compute_deviance(cohort_partials)
     info(" - Deviance computed!")
 
-    # check if the algorithm has converged
-    converged = False
-    if total_deviance["new"] == 0:
-        # Safety check to avoid division by zero
-        converged = True
-    convergence_criterion = (
-        abs(total_deviance["old"] - total_deviance["new"]) / total_deviance["new"]
-    )
-    if convergence_criterion < tolerance_level:
-        converged = True
-    return converged, new_betas, total_deviance
+    return False, new_betas, deviance, cohort_names
 
 
 def _filter_df_on_cohort_names(dfs, cohort_names, use_cohort_names):
@@ -504,6 +535,7 @@ def _compute_local_betas(
     iter_num: int,
     organizations_to_include: list[int],
     betas: list[int] | None = None,
+    use_cohort_names: list[str] = [],
 ) -> list[dict]:
     """
     Create a subtask to compute the partial beta coefficients for each organization
@@ -527,6 +559,8 @@ def _compute_local_betas(
         The organizations to include in the computation
     betas : list[int], optional
         The beta coefficients from the previous iteration, by default None
+    use_cohort_names : list[str], optional
+        The cohort names to include in the computation, by default []
 
     Returns
     -------
@@ -583,6 +617,7 @@ def _compute_partial_deviance(
     beta_estimates_previous: pd.Series | None,
     global_average_outcome_var: int,
     organizations_to_include: list[int],
+    use_cohort_names: list[str],
 ) -> list[dict]:
     """
     Create a subtask to compute the partial deviance for each organization involved in
@@ -610,6 +645,8 @@ def _compute_partial_deviance(
         The global average of the outcome variable
     organizations_to_include : list[int]
         The organizations to include in the computation
+    use_cohort_names : list[str]
+        The cohort names to include in the computation
 
     Returns
     -------

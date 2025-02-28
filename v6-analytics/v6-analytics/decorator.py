@@ -7,6 +7,13 @@ from vantage6.algorithm.tools.decorators import _get_user_database_labels
 
 
 def new_data_decorator(func: callable, *args, **kwargs) -> callable:
+    """
+    Decorator to add data to the function.
+
+    This returns the function with the `data_frames` and `cohort_names` as the
+    first two arguments.
+    """
+
     @wraps(func)
     def decorator(*args, mock_data: list[pd.DataFrame] = None, **kwargs) -> callable:
 

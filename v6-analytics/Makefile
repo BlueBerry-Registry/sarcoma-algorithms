@@ -1,4 +1,4 @@
-VANTAGE6_VERSION ?= 4.7.1
+VANTAGE6_VERSION ?= $(shell grep "vantage6-algorithm-tools==" setup.py | cut -d'=' -f3 | tr -d '"\n,')
 TAG ?= cotopaxi
 REGISTRY ?= harbor2.vantage6.ai
 REGISTRY_PROJECT ?= blueberry

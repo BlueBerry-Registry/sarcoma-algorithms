@@ -65,20 +65,24 @@ def t_test_central(
     final_result = {}
     cohort_names = results[0].keys()
     for cohort_name in cohort_names:
-
-        cohort_res = results[cohort_name]
-
         # Aggregate results to compute t value for the independent-samples t test
         # Compute pooled variance
         Sp = (
-            (cohort_res[0]["count"] - 1) * cohort_res[0]["variance"]
-            + (cohort_res[1]["count"] - 1) * cohort_res[1]["variance"]
-        ) / (cohort_res[0]["count"] + cohort_res[1]["count"] - 2)
+            (results[0][cohort_name]["count"] - 1) * results[0][cohort_name]["variance"]
+            + (results[1][cohort_name]["count"] - 1)
+            * results[1][cohort_name]["variance"]
+        ) / (results[0][cohort_name]["count"] + results[1][cohort_name]["count"] - 2)
 
         # t value
         final_result[cohort_name] = (
-            cohort_res[0]["average"] - cohort_res[1]["average"]
-        ) / (((Sp / cohort_res[0]["count"]) + (Sp / cohort_res[1]["count"])) ** 0.5)
+            results[0][cohort_name]["average"] - results[1][cohort_name]["average"]
+        ) / (
+            (
+                (Sp / results[0][cohort_name]["count"])
+                + (Sp / results[1][cohort_name]["count"])
+            )
+            ** 0.5
+        )
 
     # return the final results of the algorithm
     return final_result

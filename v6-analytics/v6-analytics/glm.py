@@ -46,9 +46,9 @@ ENVVAR_MINIMUM_ORGANIZATIONS = "GLM_MINIMUM_ORGANIZATIONS"
 ENVVAR_MAX_PCT_PARAMS_OVER_OBS = "GLM_MAX_PCT_VARS_VS_OBS"
 
 # default values for environment variables
-DEFAULT_MINIMUM_ROWS = 10
-DEFAULT_MINIMUM_ORGANIZATIONS = 3
-DEFAULT_MAX_PCT_PARAMS_VS_OBS = 10
+DEFAULT_MINIMUM_ROWS = 3
+DEFAULT_MINIMUM_ORGANIZATIONS = 1
+DEFAULT_MAX_PCT_PARAMS_VS_OBS = 100
 
 
 @new_data_decorator
@@ -74,8 +74,18 @@ def compute_local_betas(
             dfs, cohort_names, use_cohort_names
         )
 
-    for df, cohort_name, betas_for_cohort in zip(dfs, cohort_names, beta_coefficients):
+    # in the first iteration, beta_coefficients is None
+    if not beta_coefficients:
+        beta_coefficients = [None] * len(dfs)
 
+    for df, cohort_name, betas_for_cohort in zip(dfs, cohort_names, beta_coefficients):
+        info(f"cohort_name: {cohort_name}")
+        info(f"betas_for_cohort: {betas_for_cohort}")
+        info(f"formula: {formula}")
+        info(f"family: {family}")
+        info(f"is_first_iteration: {is_first_iteration}")
+        info(f"categorical_predictors: {categorical_predictors}")
+        info(f"survival_sensor_column: {survival_sensor_column}")
         local_betas[cohort_name] = _compute_local_betas(
             df,
             formula,
@@ -354,7 +364,7 @@ def _do_iteration(
     _log_header(iteration)
 
     # compute beta coefficients
-    partial_betas = _compute_local_betas(
+    partial_betas = _compute_local_betas_task(
         client,
         formula,
         family,
@@ -374,6 +384,7 @@ def _do_iteration(
     info("Computing central betas")
     new_betas = {}
     for cohort in cohort_names:
+        info(f"  cohort: {cohort}")
         cohort_partials = [result[cohort] for result in partial_betas]
         new_betas[cohort] = _compute_central_betas(cohort_partials, family)
     info(" - Central betas obtained!")
@@ -443,6 +454,9 @@ def _compute_central_betas(
         A dictionary containing the central beta coefficients and related metadata
     """
     # sum the contributions of the partial betas
+
+    info(f"partial_betas: {partial_betas}")
+
     info("Summing contributions of partial betas")
     total_observations = sum([partial["num_observations"] for partial in partial_betas])
     sum_observations = sum([partial["sum_y"] for partial in partial_betas])
@@ -484,6 +498,8 @@ def _compute_central_betas(
 
     # add the indices back to the beta estimates
     indices = pd.DataFrame(partial_betas[0]["XTX"]).index
+    info(f"Indices: {indices}")
+    info(f"Beta estimates: {beta_estimates}")
     beta_estimates = pd.Series(beta_estimates, index=indices)
     std_error_betas = pd.Series(std_error_betas, index=indices)
 
@@ -526,7 +542,7 @@ def _compute_deviance(
     }
 
 
-def _compute_local_betas(
+def _compute_local_betas_task(
     client: AlgorithmClient,
     formula: str,
     family: str,
@@ -571,6 +587,7 @@ def _compute_local_betas(
     input_ = {
         "method": "compute_local_betas",
         "kwargs": {
+            "use_cohort_names": use_cohort_names,
             "formula": formula,
             "family": family,
             "is_first_iteration": iter_num == 1,
@@ -695,18 +712,19 @@ def _check_partial_results(results: list[dict], required_keys: list[str]) -> Non
     """
     Check that each of the partial results contains complete data
     """
-    for result in results:
-        if result is None:
-            raise AlgorithmExecutionError(
-                "At least one of the nodes returned invalid result. Please check the "
-                "logs."
-            )
-        for key in required_keys:
-            if key not in result:
+    for result_node in results:
+        for cohort_name, result in result_node.items():
+            if result is None:
                 raise AlgorithmExecutionError(
-                    "At least one of the nodes returned incomplete result. Please check"
-                    " the logs."
+                    f"At least one of the nodes returned invalid result for cohort {cohort_name}. Please check the "
+                    "logs."
                 )
+            for key in required_keys:
+                if key not in result:
+                    raise AlgorithmExecutionError(
+                        f"At least one of the nodes returned incomplete result for cohort {cohort_name}. Please check"
+                        " the logs."
+                    )
 
 
 def _check_input(
@@ -829,12 +847,15 @@ def _compute_local_betas(
         survival_sensor_column,
     )
     y_column_names = data_mgr.y.columns
+    info(f"y_column_names: {y_column_names}")
 
     eta = data_mgr.compute_eta(is_first_iteration, beta_coefficients)
 
     info("Computing beta coefficients")
     mu = data_mgr.compute_mu(eta, y_column_names)
+    info(f"mu: {mu}")
     varg = data_mgr.family.variance(mu)
+    info(f"varg: {varg}")
     varg = cast_to_pandas(varg, columns=y_column_names)
 
     # TODO in R, we can do gprime <- family$mu.eta(eta), but in Python I could not
@@ -1011,6 +1032,7 @@ def cast_to_pandas(
         The data as a pandas Series.
     """
     if isinstance(data_, np.ndarray):
+        info("Casting numpy array to pandas DataFrame...")
         return pd.DataFrame(data_.flatten(), columns=columns)
     return pd.DataFrame(data_, columns=columns)
 

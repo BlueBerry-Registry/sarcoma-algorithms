@@ -7,3 +7,4 @@ from .kaplan_meier import (
     get_unique_event_times,
 )
 from .t_test import t_test_central, t_test_partial
+from .glm import glm, compute_local_betas, compute_local_deviance

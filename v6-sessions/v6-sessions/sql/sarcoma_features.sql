@@ -93,9 +93,22 @@ WITH
             LEFT JOIN
                 @results_schema.@cohort_table cohort
                 ON cohort.subject_id = episode.person_id
+                AND episode.episode_start_date = cohort.cohort_start_date
             WHERE
                 episode.episode_concept_id = 32939
                 AND episode.episode_parent_id IN (SELECT primary_tumor.episode_id FROM primary_tumor) --- get the surgeries related only to the overarching episode considered
+                AND episode.episode_object_concept_id NOT IN (
+					SELECT 
+                        c.concept_id
+                    FROM 
+                        @vocabulary_schema.concept c
+                    JOIN 
+                        @vocabulary_schema.concept_ancestor ca 
+                        ON c.concept_id = ca.descendant_concept_id
+                        AND ca.ancestor_concept_id IN (4311405) -- Biopsy 
+                        AND c.invalid_reason IS NULL
+						AND c.domain_id = 'Measurement'
+				)
                 {@cohort_id != -1} ? {AND cohort_definition_id = @cohort_id}
         ) AS all_surgeries
         LEFT join
@@ -193,8 +206,8 @@ WITH
         FROM
             @results_schema.@cohort_table cohort
         LEFT JOIN
-            @cdm_schema.condition_occurrence co
-            ON cohort.subject_id = co.person_id
+            @cdm_schema.measurement m
+            ON cohort.subject_id = m.person_id
         LEFT JOIN
             primary_tumor
             ON cohort.subject_id = primary_tumor.person_id
@@ -209,9 +222,9 @@ WITH
                 AND ca.ancestor_concept_id IN (36769180) --- Metastasis
                 AND c.invalid_reason IS NULL
             ) AS metastasis_concept
-            ON co.condition_concept_id = metastasis_concept.descendant_concept_id
+            ON m.measurement_concept_id = metastasis_concept.descendant_concept_id
         WHERE
-            DATEDIFF(day,primary_tumor.diagnosis_date, co.condition_start_date) > 90
+            DATEDIFF(day,primary_tumor.diagnosis_date, m.measurement_date) > 90
             {@cohort_id != -1} ? {AND cohort_definition_id = @cohort_id}
         GROUP BY
             cohort.subject_id
@@ -331,7 +344,7 @@ WITH
         ) AS all_tumor_grade
         WHERE rn = 1
     ),
-    --- Pre-operative radiorherapy
+    --- Pre-operative radiotherapy
     pre_radio AS (
         SELECT
             all_pre_radio.subject_id AS person_id,

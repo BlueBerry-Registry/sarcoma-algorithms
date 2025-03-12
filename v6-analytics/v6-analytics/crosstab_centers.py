@@ -89,7 +89,19 @@ def combine_center_results(
         cohort_data = combined_df[combined_df["Cohort"] == cohort]
         for var in cohort_data["Variable"].unique():
             var_data = cohort_data[cohort_data["Variable"] == var]
-            chi2, p_val = stats.chi2_contingency(var_data[center_cols].values)[:2]
+            contingency_table = var_data[center_cols].values
+
+            # Check if the contingency table has any zero rows/columns
+            if (contingency_table.sum(axis=0) > 0).all() and (
+                contingency_table.sum(axis=1) > 0
+            ).all():
+                try:
+                    chi2, p_val = stats.chi2_contingency(contingency_table)[:2]
+                except ValueError:
+                    chi2, p_val = None, None
+            else:
+                chi2, p_val = None, None
+
             results.append([cohort, var, chi2, p_val])
 
     chi_squared_df = pd.DataFrame(

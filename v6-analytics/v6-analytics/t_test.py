@@ -138,7 +138,7 @@ def _t_test_partial(df: pd.DataFrame, column_name: str) -> dict:
     # Sum of the values
     column_sum = df[column_name].sum()
     # Count of observations
-    count = len(df)
+    count = df[column_name].count()
     # Mean
     average = column_sum / count
 

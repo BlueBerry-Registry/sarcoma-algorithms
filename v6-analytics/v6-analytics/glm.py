@@ -76,11 +76,11 @@ def compute_local_betas(
 
     # in the first iteration, beta_coefficients is None
     if not beta_coefficients:
-        beta_coefficients = [None] * len(dfs)
+        beta_coefficients = {cohort_name: None for cohort_name in cohort_names}
 
-    for df, cohort_name, betas_for_cohort in zip(dfs, cohort_names, beta_coefficients):
+    for df, cohort_name in zip(dfs, cohort_names):
         info(f"cohort_name: {cohort_name}")
-        info(f"betas_for_cohort: {betas_for_cohort}")
+        info(f"betas_for_cohort: {beta_coefficients[cohort_name]}")
         info(f"formula: {formula}")
         info(f"family: {family}")
         info(f"is_first_iteration: {is_first_iteration}")
@@ -91,7 +91,7 @@ def compute_local_betas(
             formula,
             family,
             is_first_iteration,
-            betas_for_cohort,
+            beta_coefficients[cohort_name],
             categorical_predictors,
             survival_sensor_column,
         )
@@ -118,17 +118,33 @@ def compute_local_deviance(
             dfs, cohort_names, use_cohort_names
         )
 
+    # in the first iteration, beta_coefficients_previous is None
+    if not beta_coefficients_previous:
+        beta_coefficients_previous = {cohort_name: None for cohort_name in cohort_names}
+
     local_deviance = {}
-    for df, cohort_name, betas_for_cohort, betas_previous_for_cohort in zip(
-        dfs, cohort_names, beta_coefficients, beta_coefficients_previous
+    for (
+        df,
+        cohort_name,
+        betas_for_cohort,
+        betas_previous_for_cohort,
+        global_average_outcome_var_for_cohort,
+    ) in zip(
+        dfs,
+        cohort_names,
+        beta_coefficients.values(),
+        beta_coefficients_previous.values(),
+        global_average_outcome_var.values(),
     ):
+        print(f"betas_for_cohort: {betas_for_cohort}")
+        print(f"betas_previous_for_cohort: {betas_previous_for_cohort}")
 
         local_deviance[cohort_name] = _compute_local_deviance(
             df,
             formula,
             family,
             is_first_iteration,
-            global_average_outcome_var,
+            global_average_outcome_var_for_cohort,
             betas_for_cohort,
             betas_previous_for_cohort,
             categorical_predictors,
@@ -232,6 +248,7 @@ def glm(
 
     # Iterate to find the coefficients
     iteration = 1
+    # betas = {cohort_name: None for cohort_name in cohort_names}
     betas = None
     while iteration <= max_iterations:
         converged, new_betas, deviance, cohort_names = _do_iteration(
@@ -253,7 +270,10 @@ def glm(
             active_cohort_names = cohort_names
 
         # Update betas and track converged cohorts
-        betas = new_betas["beta_estimates"]
+        betas = {
+            cohort_name: new_betas[cohort_name]["beta_estimates"]
+            for cohort_name in cohort_names
+        }
 
         # Check convergence for each cohort
         for cohort in active_cohort_names[:]:  # Iterate over copy to allow removal
@@ -632,7 +652,7 @@ def _compute_partial_deviance(
     survival_sensor_column: str,
     beta_estimates: pd.Series,
     beta_estimates_previous: pd.Series | None,
-    global_average_outcome_var: int,
+    global_average_outcome_var: list[int],
     organizations_to_include: list[int],
     use_cohort_names: list[str],
 ) -> list[dict]:
@@ -679,6 +699,7 @@ def _compute_partial_deviance(
             "is_first_iteration": iter_num == 1,
             "beta_coefficients": beta_estimates,
             "global_average_outcome_var": global_average_outcome_var,
+            "use_cohort_names": use_cohort_names,
         },
     }
     if categorical_predictors:
@@ -891,6 +912,11 @@ def _compute_local_betas(
     # TODO there are some non-clear things in the code like `mul()` and `iloc[:, 0]`.
     # They are there to ensure proper multiplication etc of pandas Dataframes with
     # series. Make this code more clear and readable.
+
+    print("dimensions of X", data_mgr.X.shape)
+    print("dimensions of W", W.shape)
+    print("dimensions of z", z.shape)
+
     return {
         "XTX": data_mgr.X.T.dot(data_mgr.X.mul(W.iloc[:, 0], axis=0)).to_dict(),
         "XTz": data_mgr.X.T.dot(W * z).to_dict(),

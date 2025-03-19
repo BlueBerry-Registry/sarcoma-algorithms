@@ -895,7 +895,20 @@ def _compute_local_betas(
     # compute Z matrix and dispersion matrix
     y_minus_mu = data_mgr.y.sub(mu, axis=0)
 
-    z = eta + (y_minus_mu / gprime)
+    print("dimensions of y_minus_mu", y_minus_mu.shape)
+    print("dimensions of mu", mu.shape)
+    print("dimensions of eta", eta.shape)
+
+    z = eta + (y_minus_mu.values / gprime.values)
+
+    print("dimensions of z", z.shape)
+    print("dimensions of gprime", gprime.shape)
+    print(
+        "dimensions of y_minus_mu / gprime", (y_minus_mu.values / gprime.values).shape
+    )
+    print("y-columns", y_column_names)
+    print("gprime-columns", gprime.columns)
+    print("y_minus_mu-columns", y_minus_mu.columns)
 
     W = gprime**2 / varg
 
@@ -917,9 +930,34 @@ def _compute_local_betas(
     print("dimensions of W", W.shape)
     print("dimensions of z", z.shape)
 
+    print(f"W.iloc[:, 0] shape: {W.iloc[:, 0].shape}")
+    # print(f"X.mul result shape: {data_mgr.X.mul(W.iloc[:, 0], axis=0).shape}")
+    print(f"X.T shape: {data_mgr.X.T.shape}")
+
+    print(f"X index: {data_mgr.X.index}")
+    print(f"W index: {W.index}")
+    # Use numpy arrays directly to avoid index alignment issues
+    X_weighted = (
+        data_mgr.X.values * W.values
+    )  # Broadcasting will handle the multiplication
+    XT_dot_X_times_W = data_mgr.X.values.T.dot(X_weighted)
+    XT_dot_W_times_z = data_mgr.X.values.T.dot(W.values * z.values)
+
+    XTX_df = pd.DataFrame(
+        XT_dot_X_times_W,
+        index=data_mgr.X.columns,  # Variable names as index
+        columns=data_mgr.X.columns,  # Variable names as columns
+    )
+
+    XTz_df = pd.DataFrame(
+        XT_dot_W_times_z,
+        index=data_mgr.X.columns,  # Variable names as index
+        columns=y_column_names,  # Response variable name as columns
+    )
+
     return {
-        "XTX": data_mgr.X.T.dot(data_mgr.X.mul(W.iloc[:, 0], axis=0)).to_dict(),
-        "XTz": data_mgr.X.T.dot(W * z).to_dict(),
+        "XTX": XTX_df.to_dict(),
+        "XTz": XTz_df.to_dict(),
         "dispersion": dispersion,
         "num_observations": len(df),
         "num_variables": len(data_mgr.X.columns),

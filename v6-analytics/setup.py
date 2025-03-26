@@ -27,7 +27,7 @@ setup(
         "statsmodels",
         "pandas",
         "scipy",
-        "v6-summary-py @ git+https://github.com/vantage6/v6-summary-py.git@32bba5881311734a0152cb72f1f2bb9125e481d1",
+        "v6-summary-py@git+https://github.com/vantage6/v6-summary-py.git@bbdb1626bcfdf82659cd1ba82d6715e7060ad2fd",
         "pyarrow",
     ],
 )

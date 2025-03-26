@@ -2,6 +2,7 @@ from typing import Any
 from importlib import import_module
 
 import pandas as pd
+import numpy as np
 
 from vantage6.algorithm.tools.util import info
 from vantage6.algorithm.tools.decorators import algorithm_client
@@ -153,6 +154,16 @@ def _aggregate_partial_summaries(results: list[dict]) -> dict:
             aggregated_summary["num_complete_rows_per_node"] = [
                 result["num_complete_rows_per_node"]
             ]
+            for column in result["numeric"]:
+                aggregated_summary["numeric"][column]["median"] = [
+                    result["numeric"][column]["median"]
+                ]
+                aggregated_summary["numeric"][column]["q_25"] = [
+                    result["numeric"][column]["q_25"]
+                ]
+                aggregated_summary["numeric"][column]["q_75"] = [
+                    result["numeric"][column]["q_75"]
+                ]
             is_first = False
             continue
 
@@ -170,6 +181,9 @@ def _aggregate_partial_summaries(results: list[dict]) -> dict:
             )
             aggregated_dict["missing"] += result["numeric"][column]["missing"]
             aggregated_dict["sum"] += result["numeric"][column]["sum"]
+            aggregated_dict["median"].append(result["numeric"][column]["median"])
+            aggregated_dict["q_25"].append(result["numeric"][column]["q_25"])
+            aggregated_dict["q_75"].append(result["numeric"][column]["q_75"])
 
         # aggregate data for categorical columns
         for column in result["categorical"]:
@@ -243,6 +257,11 @@ def summary_per_data_station(
         results[name] = _summary.partial_summary._summary_per_data_station(
             df, *args, **kwargs
         )
+        # Add median and quantiles (0.25, 0.75)
+        for var in results[name]["numeric"]:
+            results[name]["numeric"][var]["median"] = float(np.nanmedian(df[var]))
+            results[name]["numeric"][var]["q_25"] = float(np.nanquantile(df[var], 0.25))
+            results[name]["numeric"][var]["q_75"] = float(np.nanquantile(df[var], 0.75))
 
     return results
 

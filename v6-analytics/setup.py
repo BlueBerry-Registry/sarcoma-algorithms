@@ -25,6 +25,7 @@ setup(
         "vantage6-algorithm-tools==4.9.1",
         "formulaic",
         "statsmodels",
+        "numpy",
         "pandas",
         "scipy",
         "v6-summary-py@git+https://github.com/vantage6/v6-summary-py.git@bbdb1626bcfdf82659cd1ba82d6715e7060ad2fd",

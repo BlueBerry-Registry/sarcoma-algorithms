@@ -3,7 +3,7 @@ import pandas as pd
 from scipy import stats
 
 from vantage6.algorithm.client import AlgorithmClient
-from vantage6.algorithm.tools.decorators import algorithm_client
+from vantage6.algorithm.tools.decorators import algorithm_client, metadata, RunMetaData
 
 from .decorator import new_data_decorator
 
@@ -14,8 +14,8 @@ def crosstab_centers(
     organizations_to_include: list[int] | None = None,
 ) -> tuple[dict, dict]:
     """ """
+    organizations = client.organization.list()
     if not organizations_to_include:
-        organizations = client.organization.list()
         organizations_to_include = [
             organization.get("id") for organization in organizations
         ]
@@ -34,13 +34,14 @@ def crosstab_centers(
     results = client.wait_for_results(task_id=task.get("id"))
 
     # Combine the results
-    combined_df, chi_squared_df = combine_center_results(results)
+    combined_df, chi_squared_df = combine_center_results(results, organizations)
 
     return combined_df, chi_squared_df
 
 
 def combine_center_results(
-    center_results: list[dict[str, list[dict[str, dict[str, int]]]]]
+    center_results: list[dict[str, list[dict[str, dict[str, int]]]]],
+    organizations: list[dict],
 ) -> tuple[dict, dict]:
     """
     Combine results from multiple centers and compute chi-squared tests.
@@ -60,7 +61,10 @@ def combine_center_results(
     # Combine counts
     rows = []
     # This is under the assumption that all cohorts have the same variables
-    for cohort in center_results[0].keys():
+
+    cohorts = [key for key in center_results[0].keys() if key != "meta"]
+
+    for cohort in cohorts:
         for var_dict in center_results[0][cohort]:
             var = list(var_dict.keys())[0]
             levels = var_dict[var].keys()
@@ -71,10 +75,18 @@ def combine_center_results(
                         "Variable": var,
                         "Level": level,
                         **{
-                            f"Center {i+1}": center[cohort][
+                            next(
+                                org["name"]
+                                for org in organizations
+                                if org["id"] == center["meta"]["organization_id"]
+                            ): center[cohort][
                                 center_results[0][cohort].index(var_dict)
-                            ][var].get(level, 0)
-                            for i, center in enumerate(center_results)
+                            ][
+                                var
+                            ].get(
+                                level, 0
+                            )
+                            for center in center_results
                         },
                     }
                 )
@@ -82,7 +94,8 @@ def combine_center_results(
     combined_df = pd.DataFrame(rows).sort_values(["Cohort", "Variable", "Level"])
 
     # Compute chi-squared tests
-    center_cols = [col for col in combined_df.columns if col.startswith("Center")]
+    organization_names = [org["name"] for org in organizations]
+    center_cols = [col for col in combined_df.columns if col in organization_names]
     results = []
 
     for cohort in combined_df["Cohort"].unique():
@@ -111,9 +124,10 @@ def combine_center_results(
     return combined_df.to_json(), chi_squared_df.to_json()
 
 
+@metadata
 @new_data_decorator
 def compute_local_counts(
-    dfs: list[pd.DataFrame], cohort_names: list[str]
+    dfs: list[pd.DataFrame], cohort_names: list[str], meta: RunMetaData
 ) -> dict[str, list[dict[str, dict[str, int]]]]:
     """
     Compute local categorical value counts for each variable for multiple dataframes.
@@ -122,6 +136,8 @@ def compute_local_counts(
     ----------
     dfs : list[pandas.DataFrame]
         One or more dataframes containing the data
+    meta : RunMetaData
+        Metadata about the run, including organization information
     cohort_names : list[str]
         Names of the cohorts corresponding to each dataframe
 
@@ -132,10 +148,23 @@ def compute_local_counts(
         Structure:
         ```python
         {
-            'cohort_name': [
+            'meta': {
+                'organization_id': int,
+                'organization_name': str,
+                'task_id': str,
+                'task_name': str,
+                'run_id': str,
+                'run_name': str,
+            },
+            'cohort_name_1': [
                 {'variable_name': {'level': count, ...}},
                 ...
-            ]
+            ],
+            'cohort_name_2': [
+                {'variable_name': {'level': count, ...}},
+                ...
+            ],
+            ...
         }
         ```
     """
@@ -143,6 +172,10 @@ def compute_local_counts(
         raise ValueError("Number of dataframes must match number of cohort names")
 
     results = {}
+    results["meta"] = {
+        "node_id": meta.node_id,
+        "organization_id": meta.organization_id,
+    }
     for df, cohort in zip(dfs, cohort_names):
         variables = df.select_dtypes(include=["category"]).columns
         results[cohort] = [{var: df[var].value_counts().to_dict()} for var in variables]

@@ -20,7 +20,7 @@ T_TEST_MINIMUM_NUMBER_OF_RECORDS = 3
 
 @algorithm_client
 def t_test_central(
-    client: AlgorithmClient, column_name: str, organizations_to_include: list[int]
+    client: AlgorithmClient, organizations_to_include: list[int]
 ) -> dict:
     """
     Send task to each node participating in the task to compute a local mean and sample
@@ -31,9 +31,6 @@ def t_test_central(
     ----------
     client : AlgorithmClient
         The client object used to communicate with the server.
-    column_name : str
-        The column to compute the mean and sample variance for. The column must be
-        numeric.
     organizations_to_include : list[int]
         The organizations to include in the task.
 

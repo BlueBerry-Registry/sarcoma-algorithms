@@ -47,11 +47,19 @@ class NoiseType(str, Enum):
 
 @new_data_decorator
 def get_unique_event_times(
-    dfs: list[pd.DataFrame], cohort_names: list[str], time_column_name: str
+    dfs: list[pd.DataFrame],
+    cohort_names: list[str],
+    time_column_name: str,
+    strata_column_name: str | None = None,
 ) -> List[List[str]]:
     results = {}
     for df, name in zip(dfs, cohort_names):
-        results[name] = _get_unique_event_times(df, time_column_name)
+        unique_event_times = _get_unique_event_times(
+            df, time_column_name, strata_column_name
+        )
+        strata = unique_event_times.keys()
+        for stratum in strata:
+            results[f"{name}_{stratum}"] = unique_event_times[stratum]
     return results
 
 
@@ -62,12 +70,24 @@ def get_km_event_table(
     time_column_name: str,
     censor_column_name: str,
     unique_event_times: List[List[int | float]],
+    strata_column_name: str | None = None,
 ) -> List[str]:
     results = {}
     for df, name in zip(dfs, cohort_names):
-        results[name] = _get_km_event_table(
-            df, time_column_name, censor_column_name, unique_event_times[name]
+
+        kms = _get_km_event_table(
+            df,
+            time_column_name,
+            censor_column_name,
+            unique_event_times,
+            strata_column_name,
+            name,
         )
+        strata = kms.keys()
+
+        for stratum in strata:
+            results[f"{name}_{stratum}"] = kms[stratum]
+
     return results
 
 
@@ -77,6 +97,7 @@ def kaplan_meier_central(
     time_column_name: str,
     censor_column_name: str,
     organizations_to_include: List[int] | None = None,
+    strata_column_name: str | None = None,
 ) -> Dict[str, Union[str, List[str]]]:
     """
     Central part of the Federated Kaplan-Meier curve computation.
@@ -96,6 +117,8 @@ def kaplan_meier_central(
         Name of the column containing the censoring.
     organizations_to_include : list of int, optional
         List of organization IDs to include (default: None, includes all).
+    strata_column_name : str, optional
+        Name of the column containing the strata.
 
     Returns
     -------
@@ -123,6 +146,7 @@ def kaplan_meier_central(
         method="get_unique_event_times",
         organizations_to_include=organizations_to_include,
         time_column_name=time_column_name,
+        strata_column_name=strata_column_name,
     )
 
     info("Aggregating unique event times per cohort")
@@ -145,6 +169,7 @@ def kaplan_meier_central(
         unique_event_times=all_unique_event_times,
         time_column_name=time_column_name,
         censor_column_name=censor_column_name,
+        strata_column_name=strata_column_name,
     )
 
     info("Aggregating event tables")
@@ -332,7 +357,9 @@ def get_env_var_as_list(envvar_name: str, default: str, separator: str = ",") ->
 
 
 # TODO open PR on the original repository to add this function
-def _get_unique_event_times(df: pd.DataFrame, time_column_name: str) -> List[str]:
+def _get_unique_event_times(
+    df: pd.DataFrame, time_column_name: str, strata_column_name: str | None = None
+) -> List[str]:
     """
     Get unique event times from a DataFrame.
 
@@ -342,6 +369,8 @@ def _get_unique_event_times(df: pd.DataFrame, time_column_name: str) -> List[str
         Input DataFrame supplied by the node.
     time_column_name : str
         Name of the column representing time.
+    strata_column_name : str, optional
+        Name of the column containing the strata.
 
     Returns
     -------
@@ -357,10 +386,20 @@ def _get_unique_event_times(df: pd.DataFrame, time_column_name: str) -> List[str
     info(f"Time column name: {time_column_name}.")
     info("Checking privacy guards.")
     _privacy_gaurds(df, time_column_name)
-
     df = _add_noise_to_event_times(df, time_column_name)
 
-    return df[time_column_name].unique().tolist()
+    if strata_column_name:
+        dfs = {}
+        for strata in df[strata_column_name].unique():
+            dfs[f"{strata_column_name}={strata}"] = df[df[strata_column_name] == strata]
+    else:
+        dfs = {"all": df}
+
+    ut = {}
+    for label, df in dfs.items():
+        ut[label] = df[time_column_name].unique().tolist()
+
+    return ut
 
 
 # TODO open PR on the original repository to add this function
@@ -368,7 +407,9 @@ def _get_km_event_table(
     df: pd.DataFrame,
     time_column_name: str,
     censor_column_name: str,
-    unique_event_times: List[int | float],
+    unique_event_times: dict[str, List[int | float]],
+    strata_column_name: str | None = None,
+    name: str | None = None,
 ) -> str:
     """
     Calculate death counts, total counts, and at-risk counts at each unique event time.
@@ -383,17 +424,64 @@ def _get_km_event_table(
         Name of the column representing censoring.
     unique_event_times : List[int | float]
         List of unique event times.
+    strata_column_name : str, optional
+        Name of the column containing the strata.
 
     Returns
     -------
     str
-        The Kaplan-Meier event table as a JSON string.
+        The Kaplan-Meier event table in JSON format.
     """
     info("Checking privacy guards.")
-    _privacy_gaurds(df, time_column_name)
 
+    # TODO we should also check the strata column
+    _privacy_gaurds(df, time_column_name)
     df = _add_noise_to_event_times(df, time_column_name)
 
+    if strata_column_name:
+        dfs = {}
+        for strata in df[strata_column_name].unique():
+            dfs[f"{strata_column_name}={strata}"] = df[df[strata_column_name] == strata]
+    else:
+        dfs = {"all": df}
+
+    km_df = {}
+    for label, df in dfs.items():
+        km_df[label] = _calculate_km_event_table(
+            df,
+            time_column_name,
+            censor_column_name,
+            unique_event_times[f"{name}_{label}"],
+        ).to_json()
+
+    return km_df
+
+
+def _calculate_km_event_table(
+    df: pd.DataFrame,
+    time_column_name: str,
+    censor_column_name: str,
+    unique_event_times: List[int | float],
+) -> pd.DataFrame:
+    """
+    Calculate the Kaplan-Meier event table with death counts, total counts, and at-risk counts.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame.
+    time_column_name : str
+        Name of the column representing time.
+    censor_column_name : str
+        Name of the column representing censoring.
+    unique_event_times : List[int | float]
+        List of unique event times.
+
+    Returns
+    -------
+    pd.DataFrame
+        The Kaplan-Meier event table as a DataFrame.
+    """
     # Make sure the censor column is boolean
     # TODO this is a fix for the current implementation.. We use category and numberical
     # data types. Thus we need to convert it before we can use arithmetic operations.
@@ -421,8 +509,7 @@ def _get_km_event_table(
     # Calculate "at-risk" counts at each unique event time
     km_df["at_risk"] = km_df["removed"].iloc[::-1].cumsum().iloc[::-1]
 
-    # Convert DataFrame to JSON
-    return km_df.to_json()
+    return km_df
 
 
 def _privacy_gaurds(df: pd.DataFrame, time_column_name: str) -> pd.DataFrame:

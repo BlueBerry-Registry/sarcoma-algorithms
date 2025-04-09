@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from typing import Dict, List, Union
+from scipy import stats
 from vantage6.algorithm.client import AlgorithmClient
 from vantage6.algorithm.tools.util import info, error
 from vantage6.algorithm.tools.decorators import algorithm_client
@@ -154,6 +155,7 @@ def kaplan_meier_central(
             pd.read_json(event_table) for event_table in cohort_local_km_tables
         ]
 
+        info("  Computing Kaplan-Meier curve")
         km = (
             pd.concat(local_event_tables)
             .groupby(time_column_name, as_index=False)
@@ -161,6 +163,50 @@ def kaplan_meier_central(
         )
         km["hazard"] = km["observed"] / km["at_risk"]
         km["survival_cdf"] = (1 - km["hazard"]).cumprod()
+
+        from scipy import stats
+
+        # Calculate confidence intervals for each time point
+        info("  Computing confidence intervals")
+
+        # Initialize cumulative variance
+        cumulative_var = 0
+        ci_bounds = []
+
+        # Calculate confidence intervals with cumulative variance
+        for _, row in km.iterrows():
+            S_t = row["survival_cdf"]
+            d_i = row["observed"]
+            n_i = row["at_risk"]
+
+            # Add to cumulative variance using Greenwood's formula
+            if n_i > d_i and n_i > 0:
+                cumulative_var += d_i / (n_i * (n_i - d_i))
+
+            # Calculate confidence interval using cumulative variance
+            if n_i > d_i and n_i > 0 and S_t > 0:
+                std_err = S_t * np.sqrt(cumulative_var)
+                z = stats.norm.ppf(1 - 0.05 / 2)  # 95% CI
+
+                if S_t == 1:  # Handle the edge case where S_t = 1
+                    lower = np.exp(-np.exp(z * std_err))
+                    upper = 1
+                else:  # Use theta transformation for all other cases
+                    theta = np.log(-np.log(S_t))
+                    se_theta = np.sqrt(cumulative_var) / np.abs(np.log(S_t))
+                    lower = np.exp(-np.exp(theta + z * se_theta))
+                    upper = np.exp(-np.exp(theta - z * se_theta))
+
+                ci_bounds.append((lower, upper))
+            else:
+                # If we have no information, use the previous bounds or (0,1) for first point
+                if ci_bounds:
+                    ci_bounds.append(ci_bounds[-1])
+                else:
+                    ci_bounds.append((0, 1))
+
+        # Unzip the confidence intervals into separate lower and upper bounds
+        km["ci_lower"], km["ci_upper"] = zip(*ci_bounds)
 
         kaplan_meier_results[cohort_name] = km.to_json()
 

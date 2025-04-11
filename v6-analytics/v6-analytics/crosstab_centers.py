@@ -46,6 +46,8 @@ def combine_center_results(
     """
     Combine results from multiple centers and compute chi-squared tests.
 
+    This function assumes that all centers have the same cohorts and variables.
+
     Parameters
     ----------
     center_results : list
@@ -58,36 +60,52 @@ def combine_center_results(
         - combined_counts: DataFrame with counts from all centers
         - chi_squared_results: DataFrame with chi-squared test results
     """
-    # Combine counts
+    # For each cohort, for each variable, for each level, add the counts
+    # We want to construct a dictionary with the levels as keys and the counts
+    # as values:
+    # [
+    #     {
+    #         "Cohort": cohort,
+    #         "Variable": var,
+    #         "Level": level,
+    #         "organization_name_1": count,
+    #         "organization_name_2": count,
+    #         ...
+    #     },
+    #     ...
+    # ]
     rows = []
-    # This is under the assumption that all cohorts have the same variables
+    cohorts_names = [key for key in center_results[0].keys() if key != "meta"]
+    for cohort in cohorts_names:
 
-    cohorts = [key for key in center_results[0].keys() if key != "meta"]
+        variable_names = [key for key in center_results[0][cohort].keys()]
+        for var in variable_names:
+            var_dict = center_results[0][cohort][var]
 
-    for cohort in cohorts:
-        for var_dict in center_results[0][cohort]:
-            var = list(var_dict.keys())[0]
-            levels = var_dict[var].keys()
-            for level in levels:
+            all_levels = {
+                level
+                for center in center_results
+                for level in center[cohort][var].keys()
+            }
+
+            for level in all_levels:
+                counts = {}
+                for center in center_results:
+                    org_name = next(
+                        org["name"]
+                        for org in organizations
+                        if org["id"] == center["meta"]["organization_id"]
+                    )
+
+                    cohort_center_counts = center[cohort]
+                    counts[org_name] = cohort_center_counts[var].get(level, 0)
+
                 rows.append(
                     {
                         "Cohort": cohort,
                         "Variable": var,
                         "Level": level,
-                        **{
-                            next(
-                                org["name"]
-                                for org in organizations
-                                if org["id"] == center["meta"]["organization_id"]
-                            ): center[cohort][
-                                center_results[0][cohort].index(var_dict)
-                            ][
-                                var
-                            ].get(
-                                level, 0
-                            )
-                            for center in center_results
-                        },
+                        **counts,
                     }
                 )
 
@@ -143,7 +161,7 @@ def compute_local_counts(
 
     Returns
     -------
-    dict[str, list[dict[str, dict[str, int]]]]
+    dict[str, dict[str, dict[str, dict[str, int]]]]
         Nested dictionary with counts per cohort, variable and category level
         Structure:
         ```python
@@ -156,14 +174,14 @@ def compute_local_counts(
                 'run_id': str,
                 'run_name': str,
             },
-            'cohort_name_1': [
-                {'variable_name': {'level': count, ...}},
+            'cohort_name_1': {
+                'VARIABLE_NAME': {'LEVEL_1': count, 'LEVEL_2': count},
                 ...
-            ],
-            'cohort_name_2': [
-                {'variable_name': {'level': count, ...}},
+            },
+            'cohort_name_2': {
+                'VARIABLE_NAME': {'LEVEL_1': count, 'LEVEL_2': count},
                 ...
-            ],
+            }
             ...
         }
         ```
@@ -178,5 +196,7 @@ def compute_local_counts(
     }
     for df, cohort in zip(dfs, cohort_names):
         variables = df.select_dtypes(include=["category"]).columns
-        results[cohort] = [{var: df[var].value_counts().to_dict()} for var in variables]
+        results[cohort] = {}
+        for var in variables:
+            results[cohort][var] = df[var].value_counts().to_dict()
     return results

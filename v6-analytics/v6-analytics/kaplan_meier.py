@@ -27,7 +27,7 @@ from .decorator import new_data_decorator
 
 KAPLAN_MEIER_MINIMUM_ORGANIZATIONS = 1
 
-KAPLAN_MEIER_MINIMUM_NUMBER_OF_RECORDS = 3
+KAPLAN_MEIER_MINIMUM_NUMBER_OF_RECORDS = 1
 
 KAPLAN_MEIER_ALLOWED_EVENT_TIME_COLUMNS_REGEX = ".*"
 
@@ -151,9 +151,15 @@ def kaplan_meier_central(
 
     info("Aggregating unique event times per cohort")
     all_unique_event_times = dict()
-    cohort_names = local_unique_event_times_per_node[0].keys()
+    cohort_names = set().union(
+        *[node.keys() for node in local_unique_event_times_per_node]
+    )
     for cohort_name in cohort_names:
-        cohort_results = [res[cohort_name] for res in local_unique_event_times_per_node]
+        cohort_results = [
+            res[cohort_name]
+            for res in local_unique_event_times_per_node
+            if cohort_name in res
+        ]
 
         unique_event_times = set()
         for local_unique_event_times in cohort_results:
@@ -175,7 +181,9 @@ def kaplan_meier_central(
     info("Aggregating event tables")
     kaplan_meier_results = dict()
     for cohort_name in cohort_names:
-        cohort_local_km_tables = [res[cohort_name] for res in local_km_per_node]
+        cohort_local_km_tables = [
+            res[cohort_name] for res in local_km_per_node if cohort_name in res
+        ]
         local_event_tables = [
             pd.read_json(event_table) for event_table in cohort_local_km_tables
         ]

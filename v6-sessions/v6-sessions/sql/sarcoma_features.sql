@@ -56,7 +56,7 @@ WITH
             @cdm_schema.death death
             ON cohort.subject_id = death.person_id
         LEFT JOIN
-            @cdm_schema.observation_period op --- questo vale se ho un unico observation_period, altrimenti dovrei prendere l'ultimo (?)
+            @cdm_schema.observation_period op
             ON cohort.subject_id = op.person_id
         {@cohort_id != -1} ? {WHERE cohort_definition_id = @cohort_id}
     ),
@@ -77,13 +77,30 @@ WITH
         FROM 
             death
     ),
+    --- get deaths from 1 to 10 years
+    survival_death AS (
+        SELECT
+            death.person_id,
+            CAST(IIF(death.survival_days >= 365, 0, 1) AS BIT) AS death_1yr,
+            CAST(IIF(death.survival_days >= 2*365, 0, 1) AS BIT) AS death_2yr,
+            CAST(IIF(death.survival_days >= 3*365, 0, 1) AS BIT) AS death_3yr,
+            CAST(IIF(death.survival_days >= 4*365, 0, 1) AS BIT) AS death_4yr,
+            CAST(IIF(death.survival_days >= 5*365, 0, 1) AS BIT) AS death_5yr,
+            CAST(IIF(death.survival_days >= 6*365, 0, 1) AS BIT) AS death_6yr,
+            CAST(IIF(death.survival_days >= 7*365, 0, 1) AS BIT) AS death_7yr,
+            CAST(IIF(death.survival_days >= 8*365, 0, 1) AS BIT) AS death_8yr,
+            CAST(IIF(death.survival_days >= 9*365, 0, 1) AS BIT) AS death_9yr,
+            CAST(IIF(death.survival_days >= 10*365, 0, 1) AS BIT) AS death_10yr
+        FROM 
+            death
+    ),
     --- histology group
     histo_group AS (
     	SELECT
-	    	primary_tumor.person_id, 
+	    	primary_tumor.person_id,
 	    	CASE
-                WHEN primary_tumor.diagnosis_concept IN (36529541,36532543,36540557,36547895,36550930,36565259,36716490,44500609,44501363,44502347,44502555) THEN '1004 Well-differentiated liposarcoma'
-                WHEN primary_tumor.diagnosis_concept IN (36529541,36532543,36540557,36547895,36550930,36565259,36716490,44500609,44501363,44502347,44502555) THEN '1007 Dedifferentiated liposarcoma'
+                WHEN primary_tumor.diagnosis_concept IN (36529541,36532543,36540557,36547895,36550930,36565259,36716490,44500609,44501363,44502347,44502555) THEN '1004/1007 Liposarcoma'
+                -- WHEN primary_tumor.diagnosis_concept IN (36529541,36532543,36540557,36547895,36550930,36565259,36716490,44500609,44501363,44502347,44502555) THEN '1007 Dedifferentiated liposarcoma'
                 WHEN primary_tumor.diagnosis_concept IN (36517959,36519685,36527462,36528858,36542197,36548944,36567690,36717566,44500548) THEN '1010 Leiomyosarcoma'
                 WHEN primary_tumor.diagnosis_concept IN (36564558,44500681) THEN '1013 Solitary fibrous tumour'
                 WHEN primary_tumor.diagnosis_concept IN (36518164,36539077,36542266,36545198,36564186,36565777,36567910,36567978) THEN '1016 MPNST'
@@ -532,6 +549,16 @@ SELECT
     survival.survival_8yr,
     survival.survival_9yr,
     survival.survival_10yr,
+    survival_death.death_1yr,
+    survival_death.death_2yr,
+    survival_death.death_3yr,
+    survival_death.death_4yr,
+    survival_death.death_5yr,
+    survival_death.death_6yr,
+    survival_death.death_7yr,
+    survival_death.death_8yr,
+    survival_death.death_9yr,
+    survival_death.death_10yr,
     ISNULL(primary_tumor.diagnosis, 'N/A') as Primary_diagnosis,
     histo_group.histology as histology,
     CAST(IIF(surgery.surgery_concept IS NOT NULL, 1, 0) AS BIT) AS surgery_yn,
@@ -559,6 +586,9 @@ LEFT JOIN
 LEFT JOIN
     survival
     ON person.person_id = survival.person_id
+LEFT JOIN
+    survival_death
+    ON person.person_id = survival_death.person_id
 LEFT JOIN
     histo_group
     ON person.person_id = histo_group.person_id

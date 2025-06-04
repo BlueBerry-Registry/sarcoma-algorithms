@@ -1,6 +1,6 @@
 # basic python3 image as base
 # FROM harbor2.vantage6.ai/infrastructure/algorithm-base
-FROM harbor2.vantage6.ai/infrastructure/algorithm-ohdsi-base
+FROM harbor2.vantage6.ai/infrastructure/algorithm-ohdsi-base:4.9.1
 
 # This is a placeholder that should be overloaded by invoking
 # docker build with '--build-arg PKG_NAME=...'

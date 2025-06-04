@@ -17,12 +17,15 @@ from vantage6.algorithm.tools.decorators import (
     metadata,
     RunMetaData,
 )
+from vantage6.types import VDataFrame
 
 from ohdsi import cohort_generator
 from ohdsi import circe
 from ohdsi import common as ohdsi_common
 from ohdsi import sqlrender
 from ohdsi import database_connector
+
+from .sql.v_types import assign_types
 
 
 def del_cohorts(cohort_names: list[str]):
@@ -32,21 +35,35 @@ def del_cohorts(cohort_names: list[str]):
 
 
 @metadata
-def get_cohorts(meta_run: RunMetaData):
-    files = Path("/mnt/data").glob("cohort_*.parquet")
+def get_cohorts(meta_run: RunMetaData, prefix: str = "cohort_"):
+    info(f"Getting cohorts from /mnt/data with prefix: {prefix}")
+    files = Path("/mnt/data").glob(f"{prefix}*.parquet")
     # get the filenames, dates and number of records
+
+    info(f"Found {len(list(Path('/mnt/data').glob(f'{prefix}*.parquet')))} files")
+    info(f"Files: {list(Path('/mnt/data').glob('*.parquet'))}")
 
     metadata = []
     for file_ in files:
-        df = pd.read_parquet(file_)
+
+        if file_.name.startswith("cohort_"):
+            df = pd.read_parquet(file_)
+        else:
+            df = VDataFrame.read_parquet(file_)
 
         def get_column_metadata(df, name, type_):
             metadata = {
                 "name": name,
                 "dtype": str(type_),
+                "vtype": (
+                    df[name].v_type.to_dict()
+                    if hasattr(df[name], "v_type") and df[name].v_type is not None
+                    else None
+                ),
             }
             if pd.api.types.is_categorical_dtype(df[name]):
                 metadata["levels"] = df[name].unique().tolist()
+
             return metadata
 
         metadata.append(
@@ -76,6 +93,7 @@ def create_cohort(
     meta_run: RunMetaData,
     cohort_definitions: list[dict],
     cohort_names: list[str],
+    prefix: str = "cohort_",
 ):
 
     # The first step is to create the cohorts in result schema of the database. This
@@ -92,7 +110,7 @@ def create_cohort(
 
     # The next step is to create the tables in the database who are responsible for
     # storing the cohort data.
-    cohort_table = f"cohort_{meta_run.task_id}_{meta_run.node_id}"
+    cohort_table = f"{prefix}{meta_run.task_id}_{meta_run.node_id}"
     cohort_table_names = cohort_generator.get_cohort_table_names(cohort_table)
     info(f"Cohort table name: {cohort_table}")
     info(f"Tables: {cohort_table_names}")
@@ -141,19 +159,30 @@ def create_cohort(
             # TODO we need to create a special container error for this
             continue
 
+        # Assign types
+        if prefix == "dev_":
+            try:
+                df = assign_types(df)
+            except Exception as e:
+                error(
+                    f"Failed to assign types to cohort dataframe: {cohort_name}, continuing"
+                )
+                traceback.print_exc()
+                continue
+
         try:
-            df.to_parquet(f"/mnt/data/cohort_{cohort_name}.parquet")
+            df.to_parquet(f"/mnt/data/{prefix}{cohort_name}.parquet")
         except Exception as e:
             error(
-                f"Failed to save cohort data to /mnt/data/cohort_{cohort_name}.parquet"
+                f"Failed to save cohort data to /mnt/data/{prefix}{cohort_name}.parquet"
             )
             traceback.print_exc()
             return {
-                "error": f"Failed to save cohort data to /mnt/data/cohort_{cohort_name}.parquet"
+                "error": f"Failed to save cohort data to /mnt/data/{prefix}{cohort_name}.parquet"
             }
 
         # TODO change this to a parquet file
-        info(f"Saved cohort data to /mnt/data/cohort_{cohort_name}.parquet")
+        info(f"Saved cohort data to /mnt/data/{prefix}{cohort_name}.parquet")
 
     # TODO clean up the results schema as we do not need it anymore
     info("Done!")

@@ -23,6 +23,7 @@ setup(
     python_requires=">=3.10",
     install_requires=[
         "vantage6-algorithm-tools==4.9.1",
+        "vantage6-types",
         "pandas",
         "pyarrow",
         "parquet-tools",

@@ -51,6 +51,18 @@ DEFAULT_MINIMUM_ORGANIZATIONS = 1
 DEFAULT_MAX_PCT_PARAMS_VS_OBS = 100
 
 
+def _temp_fix_to_convert_vars_to_int(dfs: list[pd.DataFrame]) -> list[pd.DataFrame]:
+    """
+    This is a temporary fix to convert the variables to int.
+    """
+    for df in dfs:
+        for i in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]:
+            df[f"SURVIVAL_{i}YR"] = df[f"SURVIVAL_{i}YR"].astype(int)
+            df[f"DEATH_{i}YR"] = df[f"DEATH_{i}YR"].astype(int)
+
+    return dfs
+
+
 @new_data_decorator
 def compute_local_betas(
     dfs: list[pd.DataFrame],
@@ -73,6 +85,8 @@ def compute_local_betas(
         dfs, cohort_names = _filter_df_on_cohort_names(
             dfs, cohort_names, use_cohort_names
         )
+
+    dfs = _temp_fix_to_convert_vars_to_int(dfs)
 
     # in the first iteration, beta_coefficients is None
     if not beta_coefficients:
@@ -117,6 +131,8 @@ def compute_local_deviance(
         dfs, cohort_names = _filter_df_on_cohort_names(
             dfs, cohort_names, use_cohort_names
         )
+
+    dfs = _temp_fix_to_convert_vars_to_int(dfs)
 
     # in the first iteration, beta_coefficients_previous is None
     if not beta_coefficients_previous:
@@ -893,7 +909,7 @@ def _compute_local_betas(
     gprime = cast_to_pandas(gprime, columns=y_column_names)
 
     # compute Z matrix and dispersion matrix
-    y_minus_mu = data_mgr.y.sub(mu, axis=0)
+    y_minus_mu = data_mgr.y.sub(mu.values, axis=0)
 
     print("dimensions of y_minus_mu", y_minus_mu.shape)
     print("dimensions of mu", mu.shape)
